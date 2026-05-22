@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>GA Recovery Tracker</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    min-height: 100vh;
+    background: linear-gradient(170deg, #0B1929 0%, #132E4A 40%, #0B1929 100%);
+    font-family: 'Avenir Next', 'SF Pro Display', -apple-system, sans-serif;
+    color: #E8EDF2;
+    padding: 0 0 40px 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .header { padding: 28px 20px 18px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .header-label { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #6B8DB5; margin-bottom: 4px; font-weight: 600; }
+  .header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; color: #fff; }
+  .header-stats { margin-top: 10px; font-size: 13px; color: #7DA0C4; }
+
+  .view-toggle { display: flex; margin: 14px 16px 0; background: rgba(255,255,255,0.04); border-radius: 10px; padding: 3px; }
+  .view-btn { flex: 1; padding: 8px 0; border-radius: 8px; border: none; background: transparent; color: #5A7A96; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .view-btn.active { background: rgba(255,255,255,0.1); color: #fff; }
+
+  .filters { display: flex; gap: 6px; padding: 14px 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .filter-pill { padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: #8AABBF; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+  .filter-pill.active { border-color: #D4830F; background: rgba(212,131,15,0.15); color: #F0A030; }
+
+  .sorts { padding: 0 16px 8px; display: flex; gap: 8px; }
+  .sort-btn { padding: 4px 10px; border-radius: 4px; border: none; background: transparent; color: #5A7A96; font-size: 11px; font-weight: 600; cursor: pointer; }
+  .sort-btn.active { background: rgba(255,255,255,0.1); color: #E8EDF2; }
+
+  .list { padding: 0 12px; }
+  .card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 14px 16px; margin-bottom: 6px; cursor: pointer; transition: all 0.15s; border: 1px solid rgba(255,255,255,0.03); }
+  .card.open { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.1); }
+  .card-row { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .card-info { flex: 1; min-width: 0; }
+  .card-name-row { display: flex; align-items: center; }
+  .card-name { font-size: 15px; font-weight: 600; }
+  .milestone-chip { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; background: rgba(212,131,15,0.12); color: #D4830F; margin-left: 6px; }
+  .card-sub { font-size: 11px; color: #5A7A96; margin-top: 1px; }
+  .card-days { text-align: right; flex-shrink: 0; }
+  .card-days-primary { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; }
+  .card-days-sub { font-size: 10px; color: #5A7A96; font-variant-numeric: tabular-nums; }
+  .card-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 12px; color: #8AABBF; }
+  .card-detail strong { color: #E8EDF2; font-weight: 600; }
+
+  .milestone-card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 14px 16px; margin-bottom: 6px; border: 1px solid rgba(255,255,255,0.03); }
+  .milestone-card.urgent { background: rgba(212,131,15,0.08); border-color: rgba(212,131,15,0.25); }
+  .ms-label { font-size: 13px; font-weight: 700; color: #5A7A96; }
+  .ms-label.urgent { color: #F0A030; }
+  .ms-label.soon { color: #7DA0C4; }
+  .ms-countdown { font-size: 11px; font-variant-numeric: tabular-nums; color: #5A7A96; }
+  .ms-countdown.urgent { color: #D4830F; font-weight: 700; }
+
+  .footer { text-align: center; padding: 24px 20px 0; font-size: 12px; color: #3D5A73; font-style: italic; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-label">GA Sponsorship Web</div>
+  <h1>Recovery Tracker</h1>
+  <div class="header-stats" id="stats"></div>
+</div>
+
+<div class="view-toggle">
+  <button class="view-btn active" data-view="list" onclick="switchView('list')">Everyone</button>
+  <button class="view-btn" data-view="milestones" onclick="switchView('milestones')">Upcoming Milestones</button>
+</div>
+
+<div id="list-view">
+  <div class="filters" id="filters"></div>
+  <div class="sorts" id="sorts"></div>
+  <div class="list" id="list"></div>
+</div>
+
+<div id="milestones-view" class="hidden">
+  <div class="list" id="milestones-list" style="padding-top:14px"></div>
+</div>
+
+<div class="footer">We stay connected. We grow together. We carry the message.</div>
+
+<script>
+const PEOPLE = [
+  { name: "Ed E", date: "1992-08-13", role: "grandsponsor", sponsor: null },
+  { name: "Eric F", date: "2021-06-15", role: "sponsor", sponsor: "Ed E" },
+  { name: "Zak B", date: "2021-11-03", role: "sponsee", sponsor: "Eric F" },
+  { name: "Jeff F", date: "2022-02-22", role: "sponsee", sponsor: "Eric F" },
+  { name: "Austin V", date: "2022-09-01", role: "sponsee", sponsor: "Eric F" },
+  { name: "Joe M", date: "2022-11-05", role: "sponsee", sponsor: "Eric F" },
+  { name: "Markus R", date: "2024-04-21", role: "sponsee", sponsor: "Eric F" },
+  { name: "Satch H", date: "2024-08-19", role: "sponsee", sponsor: "Eric F" },
+  { name: "Ryan S", date: "2024-08-21", role: "sponsee", sponsor: "Eric F" },
+  { name: "Brandon S", date: "2022-03-25", role: "next-gen", sponsor: "Zak B" },
+  { name: "Aaron R", date: "2024-02-04", role: "next-gen", sponsor: "Joe M" },
+  { name: "Joe K", date: "2025-12-03", role: "next-gen", sponsor: "Markus R" },
+  { name: "Mike G", date: "2025-02-22", role: "next-gen", sponsor: "Satch H" },
+  { name: "Luis M", date: "2025-01-02", role: "next-gen", sponsor: "Ryan S" },
+  { name: "Joe E", date: "2026-02-22", role: "next-gen", sponsor: "Ryan S" },
+  { name: "Neil R", date: "2025-11-03", role: "next-gen", sponsor: "Austin V" },
+  { name: "Arman T", date: "2025-10-19", role: "next-gen", sponsor: "Austin V" },
+  { name: "David P", date: "2025-10-02", role: "next-gen", sponsor: "Joe M" },
+];
+
+const ROLE_COLORS = { grandsponsor: "#D4830F", sponsor: "#1A8A8A", sponsee: "#3B6B9C", "next-gen": "#4A7A3E" };
+const ROLE_LABELS = { grandsponsor: "Grandsponsor", sponsor: "Sponsor", sponsee: "Sponsee", "next-gen": "Next Gen" };
+
+let currentView = "list";
+let currentFilter = "all";
+let currentSort = "days-desc";
+let expandedName = null;
+
+function getDays(dateStr) {
+  const start = new Date(dateStr + "T00:00:00");
+  const now = new Date(); now.setHours(0,0,0,0);
+  return Math.floor((now - start) / 86400000);
+}
+
+function formatDuration(days) {
+  if (days < 0) return { primary: "Future", sub: "" };
+  const y = Math.floor(days / 365.25);
+  const rem = days - Math.floor(y * 365.25);
+  const m = Math.floor(rem / 30.44);
+  const d = Math.floor(rem - m * 30.44);
+  if (y > 0) return { primary: y + "y " + m + "m", sub: days.toLocaleString() + " days" };
+  if (m > 0) return { primary: m + "m " + d + "d", sub: days + " days" };
+  return { primary: days + "d", sub: "" };
+}
+
+function getLatestMilestoneLabel(days) {
+  const ms = [30,60,90,180,365,730,1095,1825,3650,7300,10950];
+  const lb = ["30d","60d","90d","6mo","1yr","2yr","3yr","5yr","10yr","20yr","30yr"];
+  let last = null;
+  for (let i = 0; i < ms.length; i++) { if (days >= ms[i]) last = lb[i]; }
+  return last;
+}
+
+function getNextMilestone(dateStr) {
+  const start = new Date(dateStr + "T00:00:00");
+  const now = new Date(); now.setHours(0,0,0,0);
+  const days = Math.floor((now - start) / 86400000);
+  if (days < 0) return null;
+
+  // Build calendar-accurate milestones
+  const candidates = [];
+
+  // 100-day marks up to 1000
+  for (let i = 100; i <= 1000; i += 100) {
+    const d = new Date(start); d.setDate(d.getDate() + i);
+    if (d > now) candidates.push({ date: d, label: i + " days" });
+  }
+  // 6-month marks and year marks up to 35 years
+  for (let m = 6; m <= 420; m += 6) {
+    const d = new Date(start); d.setMonth(d.getMonth() + m);
+    if (d > now) {
+      const yrs = m / 12;
+      let label;
+      if (m % 12 === 0) label = yrs + (yrs === 1 ? " year" : " years");
+      else label = Math.floor(yrs) > 0 ? Math.floor(yrs) + ".5 years" : "6 months";
+      candidates.push({ date: d, label: label });
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.date - b.date);
+  const next = candidates[0];
+  const daysUntil = Math.floor((next.date - now) / 86400000);
+  return { label: next.label, daysUntil: daysUntil, milestoneDate: next.date };
+}
+
+function initials(name) { return name.split(" ").map(n => n[0]).join(""); }
+
+function fmtDate(dateStr) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function switchView(v) {
+  currentView = v;
+  document.getElementById("list-view").classList.toggle("hidden", v !== "list");
+  document.getElementById("milestones-view").classList.toggle("hidden", v !== "milestones");
+  document.querySelectorAll(".view-btn").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  if (v === "milestones") renderMilestones();
+}
+
+function setFilter(f) { currentFilter = f; renderFilters(); renderList(); }
+function setSort(s) { currentSort = s; renderSorts(); renderList(); }
+
+function toggleExpand(name) {
+  expandedName = expandedName === name ? null : name;
+  renderList();
+}
+
+function renderStats() {
+  const total = PEOPLE.reduce((s, p) => s + Math.max(0, getDays(p.date)), 0);
+  document.getElementById("stats").textContent = PEOPLE.length + " members · " + total.toLocaleString() + " combined days";
+}
+
+function renderFilters() {
+  const c = document.getElementById("filters");
+  c.innerHTML = "";
+  [{ key:"all", label:"All" },{ key:"grandsponsor", label:"Grandsponsor" },{ key:"sponsor", label:"Sponsor" },{ key:"sponsee", label:"Sponsees" },{ key:"next-gen", label:"Next Gen" }].forEach(f => {
+    const b = document.createElement("button");
+    b.className = "filter-pill" + (currentFilter === f.key ? " active" : "");
+    b.textContent = f.label;
+    b.onclick = () => setFilter(f.key);
+    c.appendChild(b);
+  });
+}
+
+function renderSorts() {
+  const c = document.getElementById("sorts");
+  c.innerHTML = "";
+  [{ key:"days-desc", label:"Most days" },{ key:"days-asc", label:"Fewest" },{ key:"alpha", label:"A-Z" }].forEach(s => {
+    const b = document.createElement("button");
+    b.className = "sort-btn" + (currentSort === s.key ? " active" : "");
+    b.textContent = s.label;
+    b.onclick = () => setSort(s.key);
+    c.appendChild(b);
+  });
+}
+
+function renderList() {
+  let list = PEOPLE.map(p => ({ ...p, days: getDays(p.date) }));
+  if (currentFilter !== "all") list = list.filter(p => p.role === currentFilter);
+  if (currentSort === "days-desc") list.sort((a, b) => b.days - a.days);
+  else if (currentSort === "days-asc") list.sort((a, b) => a.days - b.days);
+  else list.sort((a, b) => a.name.localeCompare(b.name));
+
+  const c = document.getElementById("list");
+  c.innerHTML = "";
+  list.forEach(p => {
+    const dur = formatDuration(p.days);
+    const color = ROLE_COLORS[p.role];
+    const isOpen = expandedName === p.name;
+    const chip = getLatestMilestoneLabel(p.days);
+    const sponsees = PEOPLE.filter(x => x.sponsor === p.name);
+
+    let html = '<div class="card-row">';
+    html += '<div class="avatar" style="background:' + color + '">' + initials(p.name) + '</div>';
+    html += '<div class="card-info"><div class="card-name-row"><span class="card-name">' + p.name + '</span>';
+    if (chip) html += '<span class="milestone-chip">' + chip + '</span>';
+    html += '</div><div class="card-sub">' + fmtDate(p.date) + ' &middot; ' + ROLE_LABELS[p.role] + '</div></div>';
+    html += '<div class="card-days"><div class="card-days-primary">' + dur.primary + '</div>';
+    if (dur.sub) html += '<div class="card-days-sub">' + dur.sub + '</div>';
+    html += '</div></div>';
+
+    if (isOpen) {
+      html += '<div class="card-detail">';
+      if (p.sponsor) html += '<div style="margin-bottom:6px">Sponsored by: <strong>' + p.sponsor + '</strong></div>';
+      if (sponsees.length > 0) html += '<div>Sponsees: <strong>' + sponsees.map(s => s.name).join(", ") + '</strong></div>';
+      if (!p.sponsor && sponsees.length === 0) html += '<div>Root of the sponsorship web</div>';
+      html += '</div>';
+    }
+
+    const div = document.createElement("div");
+    div.className = "card" + (isOpen ? " open" : "");
+    div.innerHTML = html;
+    div.onclick = () => toggleExpand(p.name);
+    c.appendChild(div);
+  });
+}
+
+function renderMilestones() {
+  const list = PEOPLE.map(p => {
+    const days = getDays(p.date);
+    const next = getNextMilestone(p.date);
+    return { ...p, days, next };
+  }).filter(p => p.next !== null).sort((a, b) => a.next.daysUntil - b.next.daysUntil);
+
+  const c = document.getElementById("milestones-list");
+  c.innerHTML = "";
+  list.forEach(p => {
+    const color = ROLE_COLORS[p.role];
+    const urgent = p.next.daysUntil <= 14;
+    const soon = p.next.daysUntil <= 30;
+    const msFmt = p.next.milestoneDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const countdown = p.next.daysUntil === 1 ? "tomorrow!" : "in " + p.next.daysUntil + " days";
+
+    let html = '<div class="card-row">';
+    html += '<div class="avatar" style="background:' + color + '">' + initials(p.name) + '</div>';
+    html += '<div class="card-info"><div class="card-name">' + p.name + '</div>';
+    html += '<div class="card-sub">' + msFmt + '</div></div>';
+    html += '<div class="card-days">';
+    html += '<div class="ms-label' + (urgent ? ' urgent' : soon ? ' soon' : '') + '">' + p.next.label + '</div>';
+    html += '<div class="ms-countdown' + (urgent ? ' urgent' : '') + '">' + countdown + '</div>';
+    html += '</div></div>';
+
+    const div = document.createElement("div");
+    div.className = "milestone-card" + (urgent ? " urgent" : "");
+    div.innerHTML = html;
+    c.appendChild(div);
+  });
+}
+
+renderStats();
+renderFilters();
+renderSorts();
+renderList();
+</script>
+</body>
+</html>
