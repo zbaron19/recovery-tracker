@@ -25,6 +25,11 @@
   .view-btn { flex: 1; padding: 8px 0; border-radius: 8px; border: none; background: transparent; color: #5A7A96; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
   .view-btn.active { background: rgba(255,255,255,0.1); color: #fff; }
 
+  .actions { padding: 10px 16px 0; }
+  .action-btn { width: 100%; padding: 11px; border-radius: 10px; border: 1px solid rgba(212,131,15,0.25); background: rgba(212,131,15,0.08); color: #F0A030; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+  .action-btn:hover, .action-btn:active { background: rgba(212,131,15,0.15); }
+  .action-hint { font-size: 11px; color: #5A7A96; text-align: center; padding: 6px 16px 0; }
+
   .filters { display: flex; gap: 6px; padding: 14px 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .filter-pill { padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: #8AABBF; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
   .filter-pill.active { border-color: #D4830F; background: rgba(212,131,15,0.15); color: #F0A030; }
@@ -72,6 +77,11 @@
 <div class="view-toggle">
   <button class="view-btn active" data-view="list" onclick="switchView('list')">Everyone</button>
   <button class="view-btn" data-view="milestones" onclick="switchView('milestones')">Upcoming Milestones</button>
+</div>
+
+<div class="actions">
+  <button class="action-btn" onclick="exportICS()">📅 Add upcoming milestones to your calendar</button>
+  <div class="action-hint">Downloads a calendar file. Open it to import every future milestone with reminders.</div>
 </div>
 
 <div id="list-view">
@@ -178,6 +188,116 @@ function initials(name) { return name.split(" ").map(n => n[0]).join(""); }
 
 function fmtDate(dateStr) {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+function fmtICalDate(d) {
+  return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate());
+}
+
+function fmtICalStampUTC(d) {
+  return d.getUTCFullYear() + pad2(d.getUTCMonth() + 1) + pad2(d.getUTCDate()) +
+         "T" + pad2(d.getUTCHours()) + pad2(d.getUTCMinutes()) + pad2(d.getUTCSeconds()) + "Z";
+}
+
+function icsEscape(s) {
+  return String(s).replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\n/g, "\\n");
+}
+
+function buildFutureMilestones(person) {
+  const start = new Date(person.date + "T00:00:00");
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const events = [];
+
+  // 100-day marks up to 1000 days
+  for (let i = 100; i <= 1000; i += 100) {
+    const d = new Date(start); d.setDate(d.getDate() + i);
+    if (d > now) events.push({ date: d, label: i + " days", key: "d" + i });
+  }
+
+  // 6-month and year marks, capped at 35 years from sobriety start
+  for (let m = 6; m <= 420; m += 6) {
+    const d = new Date(start); d.setMonth(d.getMonth() + m);
+    if (d > now) {
+      const yrs = m / 12;
+      let label, key;
+      if (m % 12 === 0) {
+        label = yrs + (yrs === 1 ? " year" : " years");
+        key = "y" + yrs;
+      } else {
+        const fullYears = Math.floor(yrs);
+        label = fullYears > 0 ? fullYears + ".5 years" : "6 months";
+        key = "m" + m;
+      }
+      events.push({ date: d, label: label, key: key });
+    }
+  }
+
+  return events;
+}
+
+function exportICS() {
+  const stamp = fmtICalStampUTC(new Date());
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Recovery Tracker//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "X-WR-CALNAME:GA Recovery Milestones",
+    "X-WR-CALDESC:Upcoming sobriety milestones for the sponsorship web"
+  ];
+
+  let count = 0;
+  PEOPLE.forEach(p => {
+    const slug = slugify(p.name);
+    buildFutureMilestones(p).forEach(ev => {
+      const startStr = fmtICalDate(ev.date);
+      const endDate = new Date(ev.date); endDate.setDate(endDate.getDate() + 1);
+      const endStr = fmtICalDate(endDate);
+      const summary = icsEscape(p.name + " — " + ev.label + " sober");
+      const desc = icsEscape(ROLE_LABELS[p.role] + " milestone · Recovery Tracker");
+      const uid = "recovery-tracker-" + slug + "-" + ev.key + "@zbaron19.github.io";
+
+      lines.push(
+        "BEGIN:VEVENT",
+        "UID:" + uid,
+        "DTSTAMP:" + stamp,
+        "DTSTART;VALUE=DATE:" + startStr,
+        "DTEND;VALUE=DATE:" + endStr,
+        "SUMMARY:" + summary,
+        "DESCRIPTION:" + desc,
+        "TRANSP:TRANSPARENT",
+        "BEGIN:VALARM",
+        "ACTION:DISPLAY",
+        "DESCRIPTION:" + summary,
+        "TRIGGER:PT9H",
+        "END:VALARM",
+        "END:VEVENT"
+      );
+      count++;
+    });
+  });
+
+  lines.push("END:VCALENDAR");
+  const ics = lines.join("\r\n");
+
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ga-recovery-milestones.ics";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+
+  console.log("Exported " + count + " milestone events.");
 }
 
 function switchView(v) {
