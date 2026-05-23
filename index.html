@@ -80,8 +80,8 @@
 </div>
 
 <div class="actions">
-  <button class="action-btn" onclick="exportICS()">📅 Add upcoming milestones to your calendar</button>
-  <div class="action-hint">Downloads a calendar file. Open it to import every future milestone with reminders.</div>
+  <button class="action-btn" onclick="exportICS()">📅 Add next 12 months of milestones to your calendar</button>
+  <div class="action-hint">Downloads a calendar file with every milestone in the next year. Open it to import with reminders.</div>
 </div>
 
 <div id="list-view">
@@ -212,18 +212,20 @@ function icsEscape(s) {
 function buildFutureMilestones(person) {
   const start = new Date(person.date + "T00:00:00");
   const now = new Date(); now.setHours(0, 0, 0, 0);
+  // Cap the export window to milestones in the next 12 months from today.
+  const cap = new Date(now); cap.setFullYear(cap.getFullYear() + 1);
   const events = [];
 
   // 100-day marks up to 1000 days
   for (let i = 100; i <= 1000; i += 100) {
     const d = new Date(start); d.setDate(d.getDate() + i);
-    if (d > now) events.push({ date: d, label: i + " days", key: "d" + i });
+    if (d > now && d <= cap) events.push({ date: d, label: i + " days", key: "d" + i });
   }
 
   // 6-month and year marks, capped at 35 years from sobriety start
   for (let m = 6; m <= 420; m += 6) {
     const d = new Date(start); d.setMonth(d.getMonth() + m);
-    if (d > now) {
+    if (d > now && d <= cap) {
       const yrs = m / 12;
       let label, key;
       if (m % 12 === 0) {
